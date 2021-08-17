@@ -12,23 +12,21 @@ const signToken = (id) =>
   });
 
 // sending TOKEN
-const createSendToken = (user, statusCode, res) => {
+const createSendToken = (user, statusCode, req, res) => {
   // creating TOKEN with option[expire]
   const token = signToken(user._id);
-  // Check TOKEN ID though jwt.io, it is hashed and the same
-  const cookieOptions = {
+  // sending cookie
+  res.cookie('jwt', token, {
     expires: new Date(
       Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
     ),
     //secure: true, // send when we are using HTTPS
     httpOnly: true, // can not be modified with any browser
-  };
-  if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
+    secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
+  });
 
-  // remove password from output
   user.password = undefined;
-  // sending cookie
-  res.cookie('jwt', token, cookieOptions);
+
   res.status(statusCode).json({
     status: 'success',
     token: token,
@@ -49,7 +47,7 @@ exports.signup = catchAsync(async (req, res, next) => {
   const url = `${req.protocol}://${req.get('host')}/me`;
   console.log(url);
   await new Email(newUser, url).sendWelcome();
-  createSendToken(newUser, 201, res);
+  createSendToken(newUser, 201, req, res);
 });
 
 exports.protect = catchAsync(async (req, res, next) => {
@@ -111,7 +109,7 @@ exports.login = catchAsync(async (req, res, next) => {
     return next(new AppError('Incorrect email or password', 401));
   }
   // 3) Send JWT
-  createSendToken(user, 200, res);
+  createSendToken(user, 200, req, res);
 });
 
 exports.logout = (req, res) => {
@@ -222,7 +220,7 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
   user.passwordResetExpires = undefined;
 
   await user.save(); // don't turn of validator, don't use update!
-  createSendToken(user, 200, res);
+  createSendToken(user, 200, req, res);
 });
 
 exports.updatePassword = catchAsync(async (req, res, next) => {
@@ -239,5 +237,5 @@ exports.updatePassword = catchAsync(async (req, res, next) => {
   await user.save();
   // User.findByIdAndUpdate won't work in this case, pre middlewares encryption
   // 4) Log user in, send JWT
-  createSendToken(user, 200, res);
+  createSendToken(user, 200, req, res);
 });
